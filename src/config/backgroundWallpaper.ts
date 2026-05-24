@@ -22,6 +22,6 @@ export const fullscreenWallpaperConfig: FullscreenWallpaperConfig = {
 		interval: 5, // 轮播间隔时间（秒）
 	},
 	zIndex: -1, // 层级，确保壁纸在背景层
-	opacity: 0.8, // 壁纸透明度
-	blur: 1, // 背景模糊程度
+	opacity: 0.85, // 壁纸透明度（略高，让咒术回战壁纸更清晰）
+	blur: 0, // 背景模糊程度（0=不模糊，让壁纸清晰展示）
 };

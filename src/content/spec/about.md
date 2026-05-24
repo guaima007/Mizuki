@@ -1,49 +1,33 @@
+## 关于我
 
-This website is built with the **Astro** framework using the [Mizuki](https://github.com/LyraVoid/Mizuki) theme.
+**杨洺惠泽** — 杭州电子科技大学 · 集成电路设计与集成系统专业 · 在读本科生
 
-::github{repo="LyraVoid/Mizuki"}
+### 学业方向
 
-## 🌟 Theme Features
+> [!NOTE]
+> 集成电路是现代信息技术的基石。从芯片设计到系统集成，每一步都关乎着未来科技的走向。
 
-### 🎨 Design & User Experience
-- **Modern & Elegant Design** - Clean, minimalist interface with beautiful typography
-- **Fully Responsive** - Optimized for all devices from mobile to desktop
-- **Dark/Light Mode** - Automatic theme switching with smooth transitions
-- **Beautiful Typography** - Enhanced readability with JetBrains Mono font
-- **Smooth Animations** - Fluid page transitions and interactive elements
+- **专业**: 集成电路设计与集成系统
+- **学校**: 杭州电子科技大学
+- **阶段**: 本科在读
 
-### 🔍 Content & Search
-- **Advanced Search** - Powered by [Pagefind](https://pagefind.app/) for fast, accurate results
-- **Enhanced Markdown** - Extended syntax with code highlighting and math support
-- **Interactive Table of Contents** - Auto-scroll navigation for long articles
-- **RSS Feed Generation** - Stay updated with automatic feed generation
-- **Reading Time Estimation** - Know how long articles take to read
-- **Post Categorization** - Organize content with tags and categories
+### 研究兴趣
 
+- 数字集成电路设计
+- SoC 架构与验证
+- 半导体器件物理
+- EDA 工具与方法学
 
+### 博客内容
 
-### 📱 Special Pages
-- **Anime Tracking Page** - Track your anime watching progress with ratings
-- **Friends Links Page** - Showcase friend websites with beautiful cards
-- **Diary/Moments Page** - Share life moments like social media posts
-- **Archive Page** - Organized timeline view of all posts
-- **About Page** - Customizable personal introduction (this page!)
+记录学习与成长的点滴，主要分享以下内容：
 
-### 🛠 Technical Features
-- **Enhanced Code Blocks** - Powered by [Expressive Code](https://expressive-code.com/)
-- **Math Support** - LaTeX rendering with KaTeX for mathematical expressions
-- **Image Optimization** - PhotoSwipe gallery with lazy loading
-- **SEO Optimized** - Built-in sitemap and meta tags for better search visibility
-- **Performance Optimized** - Fast loading with caching and optimization
-- **Comment System Ready** - Integration support for Twikoo comments
+- **考研备考** — 复习笔记、备考经验、学习方法总结
+- **项目实战** — 课程设计、个人项目、开源贡献
 
-### 🎯 Advanced Markdown Features
-- **Callouts & Admonitions** - Beautiful info boxes with `> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`
-- **Mathematical Equations** - Write LaTeX math with `$inline$` and `$$block$$` syntax
-- **GitHub Cards** - Embed repository cards with `::github{repo="user/repo"}`
-- **Syntax Highlighting** - Advanced code highlighting with line numbers
-- **Copy Code Buttons** - Easy code copying functionality
+> [!TIP]
+> 技术与创造性的融合，是我一直追求的方向。
 
 ---
 
-*Built with ❤️ using Astro and inspired by modern web design principles.*
+*「術式の先に、答えがある」*
