@@ -78,12 +78,22 @@ export const sidebarLayoutConfig: SidebarLayoutConfig = {
 			// 动画延迟时间
 			animationDelay: 200,
 		},
+		{
+			// 组件类型：日历组件(移动端不显示)
+			type: "calendar",
+			// 组件位置
+			position: "top",
+			// CSS 类名
+			class: "onload-animation",
+			// 动画延迟时间
+			animationDelay: 250,
+		},
 	],
 
 	// 侧栏组件布局配置
 	components: {
 		left: ["profile", "announcement", "tags", "card-toc"],
-		right: ["site-stats", "categories"],
+		right: ["site-stats", "calendar", "categories"],
 		drawer: ["profile", "announcement", "categories", "tags"],
 	},
 
