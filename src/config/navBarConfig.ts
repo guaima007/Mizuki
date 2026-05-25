@@ -136,6 +136,13 @@ export const navBarConfig: NavBarConfig = {
 		// 预设链接：友链
 		LinkPreset.Friends,
 
+		// 自定义链接：我的设备
+		{
+			name: "设备",
+			url: "/devices/",
+			icon: "material-symbols:devices",
+		},
+
 		// 外部链接：GitHub
 		{
 			name: "GitHub",
