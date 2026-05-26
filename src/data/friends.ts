@@ -14,11 +14,11 @@ export interface FriendItem {
 export const friendsData: FriendItem[] = [
 	{
 		id: 1,
-		title: "Astro",
-		imgurl: "https://avatars.githubusercontent.com/u/44914786?v=4&s=640",
-		desc: "The web framework for content-driven websites",
-		siteurl: "https://github.com/withastro/astro",
-		tags: ["Framework"],
+		title: "策悟斋",
+		imgurl: "https://blog.zuquanzhi.top/img/head.jpg",
+		desc: "英杰半藏",
+		siteurl: "https://blog.zuquanzhi.top",
+		tags: ["朋友"],
 	},
 	{
 		id: 2,
@@ -39,43 +39,11 @@ export const friendsData: FriendItem[] = [
 	},
 	{
 		id: 4,
-		title: "Tailwind CSS",
-		imgurl: "https://avatars.githubusercontent.com/u/67109815?v=4&s=640",
-		desc: "A utility-first CSS framework for rapidly building custom designs",
-		siteurl: "https://tailwindcss.com",
-		tags: ["CSS", "Framework"],
-	},
-	{
-		id: 5,
-		title: "TypeScript",
-		imgurl: "https://avatars.githubusercontent.com/u/6154722?v=4&s=640",
-		desc: "TypeScript is JavaScript with syntax for types",
-		siteurl: "https://www.typescriptlang.org",
-		tags: ["Language", "JavaScript"],
-	},
-	{
-		id: 6,
-		title: "React",
-		imgurl: "https://avatars.githubusercontent.com/u/6412038?v=4&s=640",
-		desc: "A JavaScript library for building user interfaces",
-		siteurl: "https://reactjs.org",
-		tags: ["Framework", "JavaScript"],
-	},
-	{
-		id: 7,
 		title: "GitHub",
 		imgurl: "https://avatars.githubusercontent.com/u/9919?v=4&s=640",
 		desc: "Where the world builds software",
 		siteurl: "https://github.com",
 		tags: ["Development", "Platform"],
-	},
-	{
-		id: 8,
-		title: "MDN Web Docs",
-		imgurl: "https://avatars.githubusercontent.com/u/7565578?v=4&s=640",
-		desc: "The web's most comprehensive resource for web developers",
-		siteurl: "https://developer.mozilla.org",
-		tags: ["Docs", "Reference"],
 	},
 ];
 
