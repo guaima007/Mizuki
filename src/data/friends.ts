@@ -13,7 +13,7 @@ export interface FriendItem {
 // 友情链接数据
 export const friendsData: FriendItem[] = [
 	{
-		id: 1,
+		id: 3,
 		title: "策悟斋",
 		imgurl: "https://blog.zuquanzhi.top/img/head.jpg",
 		desc: "英杰半藏",
@@ -30,7 +30,7 @@ export const friendsData: FriendItem[] = [
 		tags: ["Docs"],
 	},
 	{
-		id: 3,
+		id: 1,
 		title: "Vercel",
 		imgurl: "https://avatars.githubusercontent.com/u/14985020?v=4&s=640",
 		desc: "Develop. Preview. Ship.",
