@@ -5,7 +5,7 @@ description: "从 MaixCAM 自带 OCR 效果不理想到自己采集数据集、�
 tags: ["MaixCAM", "YOLO", "计算机视觉", "课程设计"]
 category: 项目实战
 draft: false
-image: /images/posts/maixcam-gas-meter/effect-digit-boxes.png
+image: /images/posts/maixcam-gas-meter/cover.png
 lang: zh-CN
 ---
 
