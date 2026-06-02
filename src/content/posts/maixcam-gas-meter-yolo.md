@@ -85,6 +85,33 @@ classes.txt
 
 这样做之后，人工工作从“每张图从零画三个框”变成了“检查框有没有偏、类别有没有错”。对于这种规则比较强的场景，预标注能省很多时间。
 
+预标注里最核心的一步，是把脚本分割出来的数字框转换成 YOLO 需要的归一化坐标。这里没有直接保存像素坐标，而是保存 `x_center / y_center / width / height`，并统一归一化到当前采集图尺寸：
+
+```python
+def rect_to_yolo(rect, img_w, img_h):
+    x, y, w, h = clamp_rect(rect, img_w, img_h)
+    cx = (x + w * 0.5) / img_w
+    cy = (y + h * 0.5) / img_h
+    nw = w / img_w
+    nh = h / img_h
+    return cx, cy, nw, nh
+
+
+def save_yolo_sample(bgr, segments, labels, sample_id):
+    stem = "digits_%s_%06d" % (labels, sample_id)
+    img_path = os.path.join(images_dir, stem + ".jpg")
+    label_path = os.path.join(labels_dir, stem + ".txt")
+
+    cv2.imwrite(img_path, bgr, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
+
+    img_h, img_w = bgr.shape[:2]
+    with open(label_path, "w", encoding="utf-8") as f:
+        for i, seg in enumerate(segments[:3]):
+            cls_id = int(labels[i])
+            cx, cy, nw, nh = rect_to_yolo(seg, img_w, img_h)
+            f.write("%d %.6f %.6f %.6f %.6f\n" % (cls_id, cx, cy, nw, nh))
+```
+
 本地整理的数据集中，图片数量大约是 1400 多张，标注框数量在 4000 个以上。各数字分布并不完全均衡，因为视频读数本身不是均匀变化的，`3`、`4`、`5` 这类数字出现得更多。
 
 ![数据集各数字标注框数量](/images/posts/maixcam-gas-meter/dataset-counts.png)
@@ -126,6 +153,44 @@ classes.txt
 
 ![码表数字区域居中显示](/images/posts/maixcam-gas-meter/effect-center-crop.png)
 
+实际代码中，我先对红色窗口做 HSV 阈值分割，再用开运算去噪、闭运算连接断裂区域，最后按面积和宽高比筛选候选框。这里没有直接选“最大红色区域”，而是额外做了 `is_meter_layout()` 判断，避免把其他红色干扰误当成码表窗口。
+
+```python
+def red_mask(bgr):
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    mask1 = cv2.inRange(hsv, RED1_LOW, RED1_HIGH)
+    mask2 = cv2.inRange(hsv, RED2_LOW, RED2_HIGH)
+    return cv2.bitwise_or(mask1, mask2)
+
+
+def detect_digit_area(bgr):
+    h, w = bgr.shape[:2]
+    mask = red_mask(bgr)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((19, 9), np.uint8), iterations=2)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidates = []
+    min_area = w * h * 0.004
+    for c in contours:
+        x, y, cw, ch = cv2.boundingRect(c)
+        area = cv2.contourArea(c)
+        if area < min_area or cw < w * 0.08 or ch < h * 0.05:
+            continue
+        if cw / max(1, ch) < 1.0:
+            continue
+        score = area + (w * h * 0.02 if y > h * 0.25 else 0)
+        candidates.append((score, x, y, cw, ch))
+
+    candidates.sort(reverse=True)
+    for _, x, y, cw, ch in candidates[:5]:
+        pad = max(4, int(min(cw, ch) * 0.08))
+        box = (max(0, x - pad), max(0, y - pad), cw + 2 * pad, ch + 2 * pad)
+        if is_meter_layout(bgr, box):
+            return box
+    return None
+```
+
 如果没有找到码表数字区域，就清成红屏，并显示“未找到码表数字”。这个功能即使 YOLO 模型还没有上传，也可以独立工作。
 
 ## 功能 2：YOLOv5s 数字识别
@@ -137,6 +202,34 @@ detector = nn.YOLOv5(model=AI_DIGIT_MODEL, dual_buff=True)
 ```
 
 检测结果会先过滤置信度，再按 `x` 坐标排序。这样屏幕上的数字顺序就是从左到右，而不是模型返回的随机顺序。之后程序把识别出的类别画到每个数字框的右上角。
+
+部署推理部分的关键点，是把 MaixCAM 摄像头图像转换成模型输入格式，再过滤掉低置信度、异常尺寸以及不在码表区域内的检测框：
+
+```python
+def detect_yolo_digits(detector, bgr, box=None):
+    img = image.cv2image(bgr, bgr=True, copy=True)
+    img = img.to_format(detector.input_format())
+    objs = detector.detect(img, conf_th=YOLO_CONF_TH, iou_th=YOLO_IOU_TH)
+
+    frame_h, frame_w = bgr.shape[:2]
+    filter_box = padded_box(box, frame_w, frame_h) if box is not None else None
+    detections = []
+
+    for obj in sorted(objs, key=yolo_object_x):
+        digit = yolo_object_to_digit(detector, obj)
+        rect = yolo_object_rect(obj)
+        score = yolo_object_score(obj)
+
+        if not re.match(r"^[0-9]$", digit):
+            continue
+        if score < YOLO_CONF_TH or rect[2] <= 2 or rect[3] <= 2:
+            continue
+        if filter_box is not None and not rect_center_inside(rect, filter_box):
+            continue
+
+        detections.append((rect, digit, score))
+    return detections
+```
 
 这一步里我还加了一个小处理：数字识别结果不是每一帧都直接相信，而是做了简单的投票和平滑。因为摄像头拍屏幕时偶尔会有抖动、拖影和反光，如果完全按单帧结果显示，数字会跳得比较明显。
 
@@ -154,6 +247,53 @@ detector = nn.YOLOv5(model=AI_DIGIT_MODEL, dual_buff=True)
 运行效果如下，左上角显示 `count`，右侧框住最后一位数字区域：
 
 ![反光条计数效果](/images/posts/maixcam-gas-meter/effect-counter.png)
+
+反光条计数的代码本质上是一个小状态机。先在最后一位数字上半部分找高亮横条，再判断它下面是否存在较暗区域，用这两个条件减少误触发。只有从 `off` 进入 `on` 时才计数，亮条消失若干帧后才允许下一次触发。
+
+```python
+def update_reflection_counter(bgr, box, segments, state):
+    x, y, w, h = last_digit_segment(box, segments)
+    crop = bgr[y : y + h, x : x + w]
+
+    roi = crop[int(h * 0.02):int(h * 0.46), int(w * 0.12):int(w * 0.88)]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    bright = cv2.inRange(hsv, (0, 0, 178), (179, 92, 255))
+    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), iterations=1)
+
+    contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    best_score, best_area, best_dark_under = 0.0, 0.0, 0.0
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        bx, by, bw, bh = cv2.boundingRect(c)
+        if bw < roi.shape[1] * 0.32 or bh < roi.shape[0] * 0.12:
+            continue
+
+        under = hsv[min(roi.shape[0], by + bh):min(roi.shape[0], by + bh + 12), bx:bx + bw]
+        dark_under = float(((under[:, :, 2] < 95) & (under[:, :, 1] > 35)).mean()) if under.size else 0.0
+        area_score = area / max(1, roi.shape[0] * roi.shape[1])
+        score = area_score * (1.0 + dark_under)
+        best_score = max(best_score, score)
+        best_area = max(best_area, area_score)
+        best_dark_under = max(best_dark_under, dark_under)
+
+    is_marker = (
+        best_score > REFLECT_HIGH_SCORE
+        and best_area > REFLECT_MIN_AREA
+        and best_dark_under > REFLECT_MIN_DARK_UNDER
+    )
+    is_low = best_score < REFLECT_LOW_SCORE or best_area < 0.025
+
+    now_ms = time.ticks_ms()
+    if is_marker and (not state["on"]) and now_ms - state["last_ms"] > REFLECT_MIN_INTERVAL_MS:
+        state["count"] += 1
+        state["on"] = True
+        state["last_ms"] = now_ms
+    elif state["on"] and is_low:
+        state["lost"] += 1
+        if state["lost"] >= REFLECT_LOST_FRAMES:
+            state["on"] = False
+```
 
 ## 踩过的坑
 
