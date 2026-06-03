@@ -31,6 +31,8 @@ import { parseDirectiveNode } from "./src/plugins/remark-directive-rehype.js";
 import { remarkFixGithubAdmonitions } from "./src/plugins/remark-fix-github-admonitions.js";
 import { remarkMermaid } from "./src/plugins/remark-mermaid.js";
 
+const umamiShareUrl = process.env.UMAMI_SHARE_URL || false;
+
 // https://astro.build/config
 export default defineConfig({
 	site: siteConfig.siteURL,
@@ -50,7 +52,7 @@ export default defineConfig({
 	integrations: [
 		oddmisc({
 			umami: {
-				shareUrl: false,
+				shareUrl: umamiShareUrl,
 			},
 		}),
 		swup({

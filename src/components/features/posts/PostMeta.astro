@@ -149,5 +149,6 @@ const {
     } else {
         fetchPageViews();
     }
+    window.addEventListener('oddmisc-ready', fetchPageViews, { once: true });
 </script>
 )}
