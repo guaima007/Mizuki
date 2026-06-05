@@ -1,7 +1,7 @@
 ---
 title: 用 Syslab 做一个特征值图像压缩 App
 published: 2026-06-06
-description: "记录《电子学智能科学计算技术》期末大作业：在 MWorks.Syslab AppDesigner 中完成一个基于特征值分解的图像压缩 GUI，并整理实现过程中的算法取舍与踩坑。"
+description: "记录《电子学智能科学计算技术》期末大作业：我在 MWorks.Syslab AppDesigner 里做了一个基于特征值分解的图像压缩 GUI。"
 tags: ["MWorks.Syslab", "Julia", "图像压缩", "特征值分解", "课程设计"]
 category: 项目实战
 draft: false
@@ -11,152 +11,283 @@ lang: zh-CN
 
 ## 写在前面
 
-这次《电子学智能科学计算技术》的期末大作业，要求用 MWorks.Syslab 的 GUI 设计平台做一个图像压缩界面：左侧显示输入图像，右侧显示压缩重建后的图像，中间用数值编辑框控制保留特征值的比例，点击“执行”后完成裁剪、计算和显示。
+这次《电子学智能科学计算技术》的期末大作业，我做的是一个基于特征值分解的图像压缩 App。
 
-我最后把它做成了一个 Syslab AppDesigner 工程，核心文件放在 `final/EigenImageCompressionApp` 下：
+题目要求其实很明确：用 MWorks.Syslab 的 GUI 设计平台做一个界面，左边显示输入图像，右边显示压缩重建图像，中间有一个数值编辑框用来设置“保留特征值比重”，点“执行”之后完成整体计算。输入图像还要先裁剪成长宽一致，再继续后面的压缩。
 
-- `app.jl`：界面、回调函数和图像压缩逻辑。
-- `app.slapp`：AppDesigner 工程文件。
-- `verify_core.jl`：用于验证语法、特征值压缩核心逻辑和图像写出。
+一开始我以为这会是一个“把算法写出来，再拖几个控件”的作业。真正做的时候才发现，麻烦的地方反而不全在算法：Syslab AppDesigner 的工程格式、图片读写、GUI 控件回调、临时文件显示、矩阵类型转换，这些细节每一个都能卡一下。
 
-这篇文章不按报告格式复述，而是把这次作业当成一次小项目复盘：从界面怎么搭、算法怎么落地，到为什么有些地方看起来简单但实际很容易卡住。
+最后我把工程放在了 `final/EigenImageCompressionApp` 里面，主要文件是：
+
+- `app.jl`：App 的界面、回调和核心算法。
+- `app.slapp`：Syslab AppDesigner 工程文件。
+- `verify_core.jl`：我用来验证核心逻辑的小脚本。
+
+这篇就不按课程报告那种格式写了，主要记录一下我是怎么把它做出来的。
 
 ![不同保留比例下的特征值重建效果](/images/posts/syslab-eigen-image-compression/evd-comparison.png)
 
-## 题目拆解
+## 我先把任务拆开
 
-题目看起来是一个 GUI 作业，但真正要完成的事情可以拆成三层。
+我做之前先把题目拆成了三件事。
 
-第一层是界面。需要两个图像显示区域、一个比例输入框和一个执行按钮。为了使用上更顺手，我额外加了“选择图像”按钮，并让输入图像区域也能点击选图。
+第一件事是界面。题目要求两个图像框、一个数值输入框和一个执行按钮。我自己又加了一个“选择图像”按钮，并且让左侧输入图像框也能点击选图，这样用起来更自然。
 
-第二层是预处理。输入图像可能不是正方形，而特征值分解这里更适合对方阵处理，所以需要先把图像居中裁剪成长宽一致的正方形，再转成灰度矩阵。
+第二件事是预处理。因为后面要做特征值分解，我希望输入给算法的是一个方阵，所以图像进来之后先做居中裁剪，把横图或竖图裁成正方形，再转成灰度矩阵。
 
-第三层是压缩重建。对灰度矩阵做特征值分解，按特征值绝对值排序，保留前 `ceil(ratio * n)` 个特征值，其余特征值置零，然后重建矩阵并显示结果。
+第三件事才是压缩。对灰度矩阵做特征值分解，按特征值绝对值从大到小排序，只保留前面一部分特征值，剩下的置零，再重建图像。
 
-界面布局大致如下：
+界面大概长这样：
 
 ![Syslab App 界面布局示意图](/images/posts/syslab-eigen-image-compression/ui-layout-diagram.png)
 
-## 为什么用特征值分解压缩图像
+## 选图：先把输入路径存下来
 
-图像本质上可以看成一个矩阵。灰度图的每个像素值对应矩阵中的一个元素，值越大越亮，值越小越暗。对一个方阵 $A$ 做特征值分解，可以写成：
+我没有把文件选择逻辑写进“执行”按钮里，而是单独做了一个 `choose_image(app)`。这样点击左侧图片框和点击“选择图像”按钮都可以复用同一段逻辑。
+
+```julia
+function choose_image(app)
+    file = uigetfile("", "选择输入图像")
+    if isempty(file)
+        return
+    end
+
+    app.InputFilePicker.Value = file
+    app.InputImage.ImageSource = file
+    app.OutputImage.ImageSource = raw""
+    app.StatusLabel.Text = "已加载图像：" * file
+end
+```
+
+这里我用了一个隐藏的 `InputFilePicker` 来存路径。左侧 `InputImage` 负责显示图像，隐藏控件负责保存原始文件位置。这样后面点“执行”的时候，不需要从图像控件里反推路径。
+
+对应的回调也很短：
+
+```julia
+function InputImageClickedFcn(app, event)
+    app.choose_image()
+end
+
+function SelectImageButtonPushed(app, event)
+    app.choose_image()
+end
+```
+
+这个地方看起来很小，但我觉得 GUI 程序里这种拆分很重要。按钮回调越薄，后面越容易查问题。
+
+## 裁剪：先变成正方形
+
+题目里明确说输入图像要通过裁剪让长宽保持一致，所以我没有做拉伸缩放，而是取中心区域裁剪。
+
+输入原图：
+
+![输入原图](/images/posts/syslab-eigen-image-compression/evd-sample-original.png)
+
+裁剪之后：
+
+![居中裁剪后的输入图](/images/posts/syslab-eigen-image-compression/evd-sample-crop.png)
+
+裁剪函数如下：
+
+```julia
+function center_crop_square(app, img)
+    dims = size(img)
+    height = dims[1]
+    width = dims[2]
+    side = min(height, width)
+
+    row_start = Int(floor((height - side) / 2)) + 1
+    col_start = Int(floor((width - side) / 2)) + 1
+    rows = row_start:(row_start + side - 1)
+    cols = col_start:(col_start + side - 1)
+
+    if length(dims) >= 3
+        return img[rows, cols, :]
+    end
+
+    return img[rows, cols]
+end
+```
+
+这里我额外判断了 `length(dims)`。如果是彩色图，就保留第三维通道；如果已经是灰度图，就直接裁二维矩阵。否则同一段代码遇到灰度图时会出问题。
+
+## 灰度化：把图像变成可以计算的矩阵
+
+特征值分解需要的是矩阵。彩色图有 RGB 三个通道，我这里先把它转成灰度图，再归一化到 `[0, 1]`。
+
+```julia
+function image_to_gray_float(app, img)
+    pixel_type = eltype(img)
+
+    if length(size(img)) >= 3 && size(img, 3) >= 3
+        r = float.(img[:, :, 1])
+        g = float.(img[:, :, 2])
+        b = float.(img[:, :, 3])
+        gray = 0.2989 .* r .+ 0.5870 .* g .+ 0.1140 .* b
+    else
+        gray = float.(img)
+    end
+
+    if pixel_type <: Unsigned
+        return gray ./ float(typemax(pixel_type))
+    end
+
+    max_value = maximum(gray)
+    if max_value > 1
+        return gray ./ 255.0
+    end
+
+    return gray
+end
+```
+
+我这里用了常见的 RGB 加权方式：红色 `0.2989`、绿色 `0.5870`、蓝色 `0.1140`。人眼对绿色更敏感，所以绿色权重大一些。
+
+后面的归一化也不能省。图片读出来可能是 `UInt8`，范围是 `0-255`；也可能已经是浮点数。直接拿不同范围的数据去重建，显示效果会不稳定。
+
+## 核心：保留一部分特征值
+
+真正的压缩逻辑在 `compress_with_eigen(app, gray, ratio)` 里。
+
+思路是这样的：假设灰度矩阵是 $A$，特征值分解可以写成：
 
 $$
 A = V \Lambda V^{-1}
 $$
 
-其中 $\Lambda$ 是由特征值组成的对角矩阵，$V$ 是特征向量矩阵。如果只保留一部分“贡献更大”的特征值，把其余特征值置零，再用同样的形式重建，就能得到一个近似图像。
-
-这不是最实用的现代图像压缩方式。真正工程中常见的是 JPEG、WebP、HEIF 这类编码格式，或者用 SVD 做低秩近似会更稳定。但这次作业的重点是“科学计算”和“GUI 操作界面”，用特征值分解能很直观地把线性代数计算和图像显示连起来。
-
-实现里我用的是：
+我把所有特征值按绝对值排序，只保留前 `ceil(ratio * n)` 个，其余特征值置零。这样重建出来的矩阵就是原图的一个近似版本。
 
 ```julia
-factors = eigen(matrix)
-values = factors.values
-vectors = factors.vectors
-order = sortperm(abs.(values), rev=true)
-kept = order[1:keep_count]
+function compress_with_eigen(app, gray, ratio)
+    matrix = Matrix{Float64}(gray)
+    n = size(matrix, 1)
+    keep_count = max(1, min(n, Int(ceil(ratio * n))))
 
-compressed_values = zeros(eltype(values), length(values))
-compressed_values[kept] = values[kept]
+    factors = eigen(matrix)
+    values = factors.values
+    vectors = factors.vectors
+    order = sortperm(abs.(values), rev=true)
+    kept = order[1:keep_count]
 
-reconstructed = vectors * diagm(compressed_values) / vectors
-reconstructed = real.(reconstructed)
-```
+    compressed_values = zeros(eltype(values), length(values))
+    compressed_values[kept] = values[kept]
 
-这里有一个细节：普通图像矩阵不一定是对称矩阵，特征值和特征向量可能会出现复数。因此重建后我取了实部，并把像素值限制在 `[0, 1]` 区间内，避免显示时出现越界。
+    reconstructed = vectors * diagm(compressed_values) / vectors
+    reconstructed = real.(reconstructed)
 
-## 图像预处理
-
-用户选进来的图可能是横图，也可能是竖图。为了保证后续矩阵是方阵，我没有直接缩放成正方形，而是选择居中裁剪。
-
-这样做的好处是不会改变图像内容的比例。缺点也很明显：如果主体不在中间，边缘内容可能会被切掉。不过对这次作业来说，要求本身就是“通过裁剪让长宽保持一致”，所以居中裁剪是最直接的选择。
-
-输入图像示例：
-
-![输入原图](/images/posts/syslab-eigen-image-compression/evd-sample-original.png)
-
-裁剪后的正方形图像：
-
-![居中裁剪后的输入图](/images/posts/syslab-eigen-image-compression/evd-sample-crop.png)
-
-核心逻辑比较简单：取宽高的较小值作为正方形边长，然后从中心区域截取。
-
-```julia
-function center_crop_square(app, img)
-    height = size(img, 1)
-    width = size(img, 2)
-    side = min(height, width)
-
-    top = Int(floor((height - side) / 2)) + 1
-    left = Int(floor((width - side) / 2)) + 1
-
-    return img[top:top + side - 1, left:left + side - 1, :]
+    return map(value -> app.clamp01(value), reconstructed), keep_count, n
 end
 ```
 
-## GUI 实现
+这里有两个我一开始容易忽略的点。
 
-这次不是单独写一个外部 Python 或 PyQt 程序，而是尽量贴合题目要求，使用 Syslab AppDesigner 的 Julia GUI API。
+第一个是 `keep_count` 至少要是 1，而且不能超过矩阵尺寸。否则比例太小或用户输入边界值时，很容易出现空索引或者越界。
 
-界面中主要有这些控件：
+第二个是 `reconstructed = real.(reconstructed)`。普通图像矩阵不一定是对称矩阵，特征值分解以后可能出现复数。图像显示不需要复数部分，所以我最后取实部。
 
-- `InputImage`：显示输入图像。
-- `OutputImage`：显示压缩重建结果。
-- `RetainRatioEditField`：输入保留特征值比例。
-- `SelectImageButton`：选择图像文件。
-- `ExecuteButton`：执行压缩和重建。
-
-按钮回调只做调度，真正的处理过程封装在 `process_image(app)` 里。这样界面事件和算法逻辑不会混在一起，后面调试时也方便单独验证核心计算。
+为了避免像素越界，我又写了一个很简单的截断函数：
 
 ```julia
-function ExecuteButtonPushed(app, event)
-    app.process_image()
+function clamp01(app, value)
+    if isnan(value)
+        return 0.0
+    elseif value < 0
+        return 0.0
+    elseif value > 1
+        return 1.0
+    end
+
+    return value
 end
 ```
 
-处理流程是：
+这一步不算高级，但很实用。没有它的话，重建后的矩阵可能出现小于 0 或大于 1 的值，写成图像时就可能显示异常。
 
-1. 读取用户选择的图像路径。
-2. 获取保留特征值比例，并限制在 `0.001` 到 `1` 之间。
-3. 居中裁剪为正方形。
-4. 转成灰度浮点矩阵。
-5. 做特征值分解压缩和重建。
-6. 把裁剪图与重建图写入临时文件。
-7. 更新左右两个图像控件的 `ImageSource`。
+## 执行按钮：把整条流程串起来
 
-之所以把中间结果写成临时图片，是因为 GUI 的 `ImageSource` 接收图片路径最稳定。虽然看起来多了一步磁盘写入，但对课程作业的交互规模来说足够直接。
+最后的 `process_image(app)` 就是把前面的步骤串起来。
 
-重建效果示例：
+```julia
+function process_image(app)
+    source_path = app.InputFilePicker.Value
+    if isempty(source_path) || !isfile(source_path)
+        errordlg("请先选择一幅输入图像。", "缺少输入")
+        return
+    end
+
+    ratio = app.RetainRatioEditField.Value
+    if ratio <= 0 || ratio > 1
+        errordlg("保留特征值比重必须位于 (0, 1]。", "参数错误")
+        return
+    end
+
+    img = imread(source_path)
+    if img isa Tuple
+        img = img[1]
+    end
+
+    cropped = app.center_crop_square(img)
+    gray = app.image_to_gray_float(cropped)
+    reconstructed, keep_count, matrix_size =
+        app.compress_with_eigen(gray, ratio)
+
+    crop_path = joinpath(tempdir(), "syslab_evd_input_square.png")
+    output_path = joinpath(tempdir(), "syslab_evd_reconstruction.png")
+    imwrite(cropped, crop_path)
+    imwrite(reconstructed, output_path)
+
+    app.InputImage.ImageSource = crop_path
+    app.OutputImage.ImageSource = output_path
+    app.StatusLabel.Text =
+        "完成：裁剪为 $(matrix_size)x$(matrix_size)，保留 $(keep_count)/$(matrix_size) 个特征值。"
+end
+```
+
+我这里没有直接把矩阵塞回图像控件，而是先把裁剪图和重建图写到临时目录，再让 `ImageSource` 指向这两个文件。这个方案比较朴素，但在 Syslab 的 GUI 里很稳。
+
+压缩重建效果如下：
 
 ![压缩重建后的图像](/images/posts/syslab-eigen-image-compression/evd-sample-reconstruction.png)
 
-## 保留比例带来的变化
+## 比例调起来很直观
 
-保留比例越低，重建图越模糊，细节越容易丢失；保留比例越高，图像越接近原图，但压缩意义也越弱。
+这个 App 最适合观察的地方就是保留比例。
 
-我在测试时主要试了这些比例：
+我测试时主要试了这些数值：
 
-- `0.05`：能看到大致结构，但细节损失明显。
-- `0.10`：轮廓基本可辨，局部纹理开始恢复。
+- `0.05`：大结构还能看出来，但细节损失明显。
+- `0.10`：轮廓比较清楚，纹理开始恢复。
 - `0.25`：整体观感已经比较稳定。
 - `0.50`：和原图差距进一步缩小。
-- `1.00`：理论上接近完整重建。
+- `1.00`：接近完整重建。
 
-这个过程挺适合做课堂展示，因为滑动比例或者改数值后，图像质量变化很直观。线性代数里的“保留主成分”不再只是公式，而是能马上体现在图像上。
+这也是我觉得这个作业有意思的地方。特征值分解在课本上是公式，放进图像里以后，就能很直接地看到“保留多少信息”和“画面质量”之间的关系。
 
-## 踩过的坑
+## 我踩到的几个坑
 
-第一个坑是 AppDesigner 的工程格式。`.slapp` 文件不只是普通脚本，里面还包含布局、控件、回调和工程元数据。刚开始如果只写 `app.jl`，逻辑能看懂，但不一定能像正常 App 工程一样打开和运行。后面我参考了 Syslab 自带示例，才把 `app.jl` 和 `app.slapp` 都生成出来。
+第一个坑是 `.slapp`。我一开始以为有 `app.jl` 就差不多了，后来发现 AppDesigner 工程不只是脚本，还包含布局、控件、回调和一些元数据。最后我是参考 Syslab 自带示例，把 `app.jl` 和 `app.slapp` 都整理出来，才更像一个完整工程。
 
-第二个坑是图像矩阵类型。彩色图、灰度图、浮点矩阵和显示控件需要的图片路径是几种不同形式。代码里必须把“用于计算的矩阵”和“用于显示的图片文件”分清楚，否则很容易在某一步类型不匹配。
+第二个坑是图像类型。彩色图、灰度图、`UInt8`、浮点矩阵、GUI 显示路径，这几个东西不能混为一谈。算法要的是矩阵，控件要的是图片路径，中间转换必须写清楚。
 
-第三个坑是特征值分解的数值结果。非对称矩阵可能产生复数结果，所以重建后不能直接当作图像写出。取实部、截断到合法像素范围这些步骤虽然不复杂，但少一步都会导致显示异常。
+第三个坑是非对称矩阵的特征值分解。图像矩阵不是专门构造出来的对称矩阵，重建时出现复数并不奇怪。这个问题如果不处理，后面写图像就容易出异常。
 
-第四个坑是验证。GUI 程序如果只靠手点，很难判断问题是在界面、文件选择、图像读写还是算法本身。于是我单独写了 `verify_core.jl`，先验证 `app.jl` 能解析，再用一个小矩阵跑压缩逻辑，最后测试图像能否写出。
+第四个坑是验证。GUI 程序只靠手点很难判断问题在哪，所以我单独写了一个 `verify_core.jl`，不打开界面也能检查核心逻辑。
 
-验证输出是：
+```julia
+code = read(joinpath(@__DIR__, "app.jl"), String)
+Meta.parseall(code)
+
+img = reshape(range(0, 1, length=64), 8, 8)
+reconstructed, keep_count, matrix_size = compress_with_eigen(img, 0.25)
+
+@assert size(reconstructed) == (8, 8)
+@assert keep_count == 2
+@assert matrix_size == 8
+@assert minimum(reconstructed) >= 0
+@assert maximum(reconstructed) <= 1
+```
+
+验证通过时会输出：
 
 ```text
 app.jl parse ok
@@ -164,12 +295,12 @@ core eigen compression ok
 image write ok
 ```
 
-这个小脚本很有用。它不能替代完整 GUI 测试，但能先把核心算法和环境问题排掉。
+这个脚本不算复杂，但帮我把“算法本身有没有问题”和“GUI 有没有问题”分开了。
 
 ## 最后的感受
 
-这次大作业最有收获的地方，不是写出了多复杂的算法，而是把一个课本里的矩阵分解过程做成了可操作、可观察的界面。
+这次作业对我来说，不只是完成了一个界面，而是把线性代数、图像处理和 GUI 工程串到了一起。
 
-以前看特征值分解，更多是在公式层面理解。真正把图像读进来、裁剪成矩阵、保留部分特征值、再重建显示出来之后，才会更直观地感受到：数学对象和工程对象之间还有很多转换工作。矩阵计算只是中间一环，前后的数据格式、边界条件、GUI 回调和验证流程，同样会影响最终结果。
+以前看特征值分解，更多是在公式层面理解。真正做成 App 之后，我才更明显地感觉到，数学计算只是中间一环。前面要处理输入图像，后面要考虑显示方式，中间还要处理类型、边界值和错误提示。
 
-如果以后继续改这个项目，我会优先做两件事：一是增加不同保留比例下的 PSNR 或误差曲线，让结果不只靠肉眼比较；二是补一个 SVD 版本，和特征值分解放在同一个界面里对比。这样这份作业就不只是“完成要求”，还能变成一个更完整的图像矩阵分解演示工具。
+如果以后继续改这个项目，我想加两个东西。一个是 PSNR 或误差曲线，让不同保留比例的效果不只靠肉眼判断；另一个是加一个 SVD 版本，放在同一个界面里和特征值分解对比。这样它就不只是一个期末作业，而是一个更完整的图像矩阵分解演示工具。
