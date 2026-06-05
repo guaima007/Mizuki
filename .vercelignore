@@ -1,0 +1,5 @@
+final/
+dist/
+.astro/
+node_modules/
+*.log

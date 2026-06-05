@@ -25,6 +25,10 @@ const {
 
 const clarityEnable =
 	thirdPartyAnalytics.enable && thirdPartyAnalytics.clarityId;
+
+const umamiScriptUrl = process.env.UMAMI_SCRIPT_URL;
+const umamiWebsiteId = process.env.UMAMI_WEBSITE_ID;
+const umamiEnable = !!(umamiScriptUrl && umamiWebsiteId);
 ---
 
 <!-- 第三方分析脚本 - 仅在用户交互后延迟加载 -->
