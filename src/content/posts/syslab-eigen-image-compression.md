@@ -5,7 +5,7 @@ description: "记录《电子学智能科学计算技术》期末大作业：在
 tags: ["MWorks.Syslab", "Julia", "图像压缩", "特征值分解", "课程设计"]
 category: 项目实战
 draft: false
-image: /images/posts/syslab-eigen-image-compression/evd-comparison.png
+image: /images/posts/syslab-eigen-image-compression/cover.png
 lang: zh-CN
 ---
 
