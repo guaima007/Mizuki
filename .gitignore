@@ -23,6 +23,9 @@ pnpm-debug.log*
 /content/
 *.backup
 
+# Local competition project materials
+/esp_prj/
+
 # Large zip files
 *.zip
 
