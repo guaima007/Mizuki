@@ -143,6 +143,13 @@ export const navBarConfig: NavBarConfig = {
 			icon: "material-symbols:devices",
 		},
 
+		{
+			name: "880 错题集合",
+			url: "https://880.ymhzone.xyz/",
+			icon: "material-symbols:calculate",
+			external: true,
+		},
+
 		// 外部链接：GitHub
 		{
 			name: "GitHub",
